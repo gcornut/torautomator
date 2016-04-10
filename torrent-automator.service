@@ -25,7 +25,7 @@ fi
 DESC="Torrent automator"
 BASE_DIR=PATH-TO/torrent-automator
 LOG_FILE=$BASE_DIR/main.log
-DAEMON=$BASE_DIR/main.js
+DAEMON=$BASE_DIR/main
 PIDFILE=$BASE_DIR/main.pid
 DAEMONUSER=USER
 
