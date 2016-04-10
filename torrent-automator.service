@@ -23,17 +23,34 @@ fi
 # with your own name if you copy and modify this script.
 
 DESC="Torrent automator"
-BASE_DIR=PATH-TO/torrent-automator
-LOG_FILE=$BASE_DIR/main.log
-DAEMON=$BASE_DIR/main
+NAME="torrent-automator"
+BASE_DIR=<PATH-TO-HERE>/$NAME
+
+DAEMONUSER=<USER>
 PIDFILE=$BASE_DIR/main.pid
-DAEMONUSER=USER
+DAEMON=$BASE_DIR/main
+
+start() {
+    start-stop-daemon --start --background --quiet --chuid $DAEMONUSER    \
+    --make-pidfile --pidfile $PIDFILE       \
+    --exec $DAEMON
+}
+stop() {
+    start-stop-daemon --stop --quiet --oknodo --retry 30 --pidfile $PIDFILE
+}
 
 case $1 in
-start) start-stop-daemon --start --background --quiet --chuid $DAEMONUSER    \
-       --make-pidfile --pidfile $PIDFILE       \
-       --startas /bin/bash -- -c "exec $DAEMON > $LOG_FILE 2>&1"
-       ;;
-stop)  start-stop-daemon --stop --pidfile $PIDFILE
-       ;;
+start)
+    echo -n "Starting daemon: "$NAME
+    start
+    echo ".";;
+stop)
+    echo -n "Stopping daemon: "$NAME
+    stop
+    echo ".";;
+restart)
+    echo -n "Restarting daemon: "$NAME
+    start
+    stop
+    echo ".";;
 esac

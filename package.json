@@ -2,7 +2,7 @@
   "name": "tvshow",
   "version": "1.0.0",
   "description": "",
-  "main": "main.js",
+  "main": "src/main.js",
   "dependencies": {
     "fn.js": "^0.8.1",
     "fuzzy-scheduler": "^1.0.0",
