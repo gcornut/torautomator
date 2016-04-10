@@ -1,82 +1,71 @@
-var http = require('http')
-var path = require('path')
-var fs = require('fs')
-fs.mkdirp = require('mkdir-parents')
-var isVideo = require('is-video')
-var Promise = require('promise')
-var fn = require('fn.js')
+const http = require('http')
+const path = require('path')
+const isVideo = require('is-video')
+const Promise = require('promise')
+const fn = require('fn.js')
 
-var filter = fn.curry(fn.filter)
-function log() {
-  fn.apply(console.log, ["[TORRENT COMPLETE]"].concat(fn.toArray(arguments)))
+const filter = fn.curry(fn.filter)
+const properties = require('./properties')
+const showsFolder = properties.getPath('torrent-dest-folder')
+
+const fs = require('fs')
+const link = Promise.denodeify(fs.link)
+const readdir = Promise.denodeify(fs.readdir)
+const mkdirp = Promise.denodeify(require('mkdir-parents'))
+
+function log(...args) {
+  fn.apply(console.log, ["[TORRENT COMPLETE]"].concat(args))
 }
 
-var properties = require('../properties.json')
-function checkProperty(property) {
-  if (!properties[property])
-    throw new Error("Missing property '"+property+"'")
+function prepareSrcPath(srcDir, srcName) {
+  const findVideos = (file) => {
+    if (!isVideo(file)) {
+      return readdir(file)
+        .then(filter(isVideo))
+        .then((videos) => videos.map((video) => path.join(file, video)))
+    }
+    return Promise.resolve([path.join(srcDir, file)])
+  }
+  return findVideos(path.join(srcDir, srcName))
+    .then((videos) => {
+      if (!videos || videos.length < 1)
+        throw new Error("No video found in torrent '"+srcName+"'")
+      if (videos.length > 1) {
+        log("Too many video files in torrent '"+srcName+"'.\n" +
+          "  Taking the first one '"+videos[0]+"'")
+      }
+      return videos[0]
+    })
 }
-checkProperty('torrent-dest-folder')
 
-var showsFolder = properties['torrent-dest-folder'].replace(/~/g, process.env.HOME)
+function prepareDestFolder(episode) {
+  const showFolder = path.join(showsFolder, episode.show.name.replace(/'/g, ""))
+  const seasonFolder = path.join(showFolder, "Season " + episode.season_number)
+  const result = Promise.resolve(seasonFolder)
 
-module.exports = function(torrentRepository) {
+  if (!fs.existsSync(seasonFolder)) {
+    log("Creating directory '"+seasonFolder+"'")
+    return mkdirp(seasonFolder).then(() => result)
+  }
+  return result
+}
 
-  function onTorrentComplete(hash, srcDir, srcName) {
-    if (torrentRepository.has(hash)) {
+module.exports = (torrentRepository) => {
+
+  function onTorrentComplete([hash, srcDir, srcName]) {
+    if (torrentRepository.has(hash.toUpperCase())) {
       log("Torrent '" + srcName + "' completed")
-      var episode = torrentRepository.get(hash)
+      const episode = torrentRepository.get(hash.toUpperCase())
 
-      function findVideos(file) {
-        if (!isVideo(file)) {
-          return Promise.denodeify(fs.readdir)(file)
-            .then(filter(isVideo))
-            .then(function(videos) {
-              return videos.map(function (video) {
-                return path.join(file, video)
-              })
-            })
-            //.then(map(fn.partial(path.join, file)))
-        }
-        return Promise.resolve([path.join(srcDir, file)])
-      }
-
-      function prepareSrcPath() {
-        return findVideos(path.join(srcDir, srcName))
-          .then(function(videos) {
-            if (!videos || videos.length < 1)
-              throw new Error("No video found in torrent '"+srcName+"'")
-            if (videos.length > 1) {
-              log("Too many video files in torrent '"+srcName+"'.\n" +
-                "  Taking the first one '"+videos[0]+"'")
-            }
-            return videos[0]
-          })
-      }
-
-      function prepareDestFolder() {
-        var showFolder = path.join(showsFolder, episode.show.name.replace(/'/g, ""))
-        var seasonFolder = path.join(showFolder, "Season " + episode.season_number)
-
-        if (!fs.existsSync(seasonFolder)) {
-          log("Creating directory '"+seasonFolder+"'")
-          return Promise.denodeify(fs.mkdirp)(seasonFolder)
-            .then(function () {
-              return Promise.resolve(seasonFolder)
-            })
-        }
-        return seasonFolder
-      }
-
-      Promise.all([prepareSrcPath(), prepareDestFolder()])
-        .then(function(res) {
-          var srcPath = res[0], destFolder = res[1]
-          var destFile = episode.fileBaseName + path.extname(srcPath)
-          var destPath = path.join(destFolder, destFile)
+      return Promise
+        .all([prepareSrcPath(srcDir, srcName), prepareDestFolder(episode)])
+        .then(([srcPath, destFolder]) => {
+          const destFile = episode.fileBaseName + path.extname(srcPath)
+          const destPath = path.join(destFolder, destFile)
 
           episode.file = destPath
           log("Moving '"+srcPath+"' to '"+destPath+"'")
-          return Promise.denodeify(fs.link)(srcPath, destPath)
+          return link(srcPath, destPath)
         })
         .catch(console.error)
     }
@@ -85,17 +74,14 @@ module.exports = function(torrentRepository) {
   /*
    * Listen for HTTP request signaling torrent completion
    */
-  var PORT = 9092
-  http.createServer(function (req, res) {
+  const PORT = 9092
+  http.createServer((req, res) => {
       var data = ""
-      req.on('data', function (chunk) {
-        data += chunk.toString()
-      })
-      req.on('end',function () {
-        var parse = data.split("::")
-        if (parse.length == 3) {
-          onTorrentComplete(parse[0].toUpperCase(), parse[1], parse[2])
-        }
+      req.on('data', (chunk) => data += chunk.toString())
+      req.on('end', () => {
+        const parse = data.split("::")
+        if (parse.length == 3)
+          onTorrentComplete(parse)
         res.end()
       })
     }).listen(PORT)
