@@ -1,0 +1,23 @@
+{
+  "name": "tvshow",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "dependencies": {
+    "fn.js": "^0.8.1",
+    "fuzzy-scheduler": "^1.0.0",
+    "hashmap": "^2.0.5",
+    "is-video": "^1.0.1",
+    "kickass-torrent": "^0.0.3",
+    "mkdir-parents": "0.0.2",
+    "moment": "^2.12.0",
+    "promise": "^7.1.1",
+    "subtitles-downloader": "^1.0.5",
+    "transmission": "^0.4.5",
+    "tvshowtime-api": "^1.2.0"
+  },
+  "devDependencies": {},
+  "scripts": {},
+  "author": "",
+  "license": "ISC"
+}
