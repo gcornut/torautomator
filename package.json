@@ -1,5 +1,5 @@
 {
-  "name": "tvshow",
+  "name": "torrent-automator",
   "version": "1.0.0",
   "description": "",
   "main": "src/main.js",
@@ -8,16 +8,20 @@
     "fuzzy-scheduler": "^1.0.0",
     "hashmap": "^2.0.5",
     "is-video": "^1.0.1",
+    "jsonfile": "^2.3.0",
     "kickass-torrent": "^0.0.3",
     "mkdir-parents": "0.0.2",
+    "mode-to-permissions": "0.0.2",
     "moment": "^2.12.0",
     "promise": "^7.1.1",
-    "subtitles-downloader": "^1.0.5",
+    "prompt": "^1.0.0",
     "transmission": "^0.4.5",
     "tvshowtime-api": "^1.2.0"
   },
   "devDependencies": {},
-  "scripts": {},
+  "scripts": {
+    "postinstall": "node --harmony_destructuring scripts/configure.js"
+  },
   "author": "",
   "license": "ISC"
 }

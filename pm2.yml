@@ -1,0 +1,6 @@
+apps:
+  - script   : src/main.js
+    name     : torrent-automator
+    node_args: "--harmony_rest_parameters --harmony_destructuring"
+    exec_mode: fork
+    instances: 1

@@ -1,4 +1,4 @@
 node_modules*
 *.pid
 *.log
-properties.json
+config.json

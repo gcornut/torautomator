@@ -1,3 +1,4 @@
+'use strict'
 const api = require('tvshowtime-api')
 const Promise = require('promise')
 const kickass = require('kickass-torrent')
@@ -7,43 +8,42 @@ const Transmission = require('transmission')
 const scheduler = require('fuzzy-scheduler')
 const moment = require('moment')
 
+// Utils
 const map = fn.curry(fn.map)
 const filter = fn.curry(fn.filter)
-const episodeRepository = new HashMap()
-
-const properties = require('./properties')
-const transmission = new Transmission({host: properties.get('transmission-daemon-host')})
-const tv = new api(properties.get(['tvshowtime-api-token']))
-
-const zeroPad =
-  (number) => ("0" + number).slice(-2)
-const containsIgnoreCase =
-  (a, b) => a.toLowerCase().indexOf(b.toLowerCase()) > -1
-
+const findBy = (predicate, prop) => collection =>
+  collection.find(fn.compose(predicate, fn.prop(prop)))
+const zeroPad = number => ("0" + number).slice(-2)
+const containsIgnoreCase = a => b =>
+  a.toLowerCase().indexOf(b.toLowerCase()) > -1
 function log(...args) {
   fn.apply(console.log, ["[TORRENT LAUNCHER]"].concat(args))
 }
 
+const config = require('./config')
+const transmission = new Transmission({
+  host: config.get('transmission-daemon-host'),
+  port: config.getNum('transmission-daemon-port')
+})
+const tvst = new api(config.get('tvshowtime-api-token'))
+
 module.exports = function(torrentRepository) {
+  const episodeRepository = new HashMap()
 
-  const torrentNameMatches = fn.curry((showTitle, num, torrentName) =>
-    containsIgnoreCase(torrentName, num) &&
-      showTitle.replace(/'(\w+)?/g, "").split(" ")
-        .every((word) => containsIgnoreCase(torrentName, word))
-  )
-
-  const findBy = fn.curry((predicate, prop, collection) =>
-    collection.find(fn.compose(predicate, fn.prop(prop)))
-  )
+  const torrentNameMatches = (showTitle, num) => torrentName =>
+    containsIgnoreCase(torrentName)(num) &&
+      showTitle.replace(/'(\w+)?/g, "")
+        .split(" ")
+        .every(containsIgnoreCase(torrentName))
 
   function searchTorrentInTransmission(showTitle, num) {
     const getTorrents = Promise.denodeify(transmission.get.bind(transmission))
     return getTorrents()
       .then(fn.prop('torrents'))
       .then(findBy(torrentNameMatches(showTitle, num), 'name'))
-      .then(function (torrent) {
+      .then(torrent => {
         if(torrent) {
-          log("Found transmission torrent '"+torrent.name+"'")
+          log("Found transmission torrent '" + torrent.name + "'")
           return torrent.hashString
         }
       })
@@ -56,7 +56,7 @@ module.exports = function(torrentRepository) {
     return kickassSearch({q: searchTitle})
       .then(fn.prop('list'))
       .then(findBy(torrentNameMatches(showTitle, num), 'title'))
-      .then((torrent) => {
+      .then(torrent => {
         if(!torrent) throw new Error("No suitable torrent found for " + searchTitle)
         log("Found KickAss torrent '" + torrent.title + "'")
         return torrent.hash
@@ -64,17 +64,17 @@ module.exports = function(torrentRepository) {
   }
 
   function launchTorrent(torrentHash) {
-    const magnet = "magnet:?xt=urn:btih:"+torrentHash
+    const magnet = "magnet:?xt=urn:btih:" + torrentHash
     const addUrl = Promise.denodeify(transmission.addUrl.bind(transmission))
     return addUrl(magnet, {})
   }
 
   function updateToWatch() {
     return new Promise(
-        (resolve, reject) => tv.getToWatch({page: 0, limit: 100}, resolve)
-      ).then((list) => {
+        (resolve, _) => tvst.getToWatch({page: 0, limit: 100}, resolve)
+      ).then(list => {
         log("Updating from TVShowTime...")
-        const promises = list.episodes.map((episode) => {
+        const promises = list.episodes.map(episode => {
           if (episodeRepository.has(episode.id)) return
 
           const show = episode.show
@@ -89,18 +89,18 @@ module.exports = function(torrentRepository) {
 
           log("New episode "+ name + " " + num)
           return searchTorrentInTransmission(name, num)
-            .then((torrentHash) => {
+            .then(torrentHash => {
               if (!torrentHash) {
                 return searchTorrentInKickAss(name, num)
                   .then(launchTorrent)
-                  .then((torrent) => {
+                  .then(torrent => {
                       log("Added torrent " + name + " " + num)
                       return torrent.hashString
                   })
               }
               return torrentHash
             })
-            .then((torrentHash) => {
+            .then(torrentHash => {
               episodeRepository.set(episode.id, episode)
               torrentRepository.set(torrentHash.toUpperCase(), episode)
             })
@@ -111,11 +111,14 @@ module.exports = function(torrentRepository) {
   }
 
   function updateAndSchedule() {
-    updateToWatch().then(() => {
-      const now = moment()
-      const then = moment(now).add(3, 'h')
-      scheduler.do(updateAndSchedule).between(now, then).done()
-    })
+    updateToWatch().then(
+      // Schedule next update sometime between 1 and 3h
+      () => scheduler.do(updateAndSchedule)
+        .between(
+          moment().add(1, 'h'),
+          moment().add(3, 'h')
+        ).done()
+    )
   }
   updateAndSchedule()
 }
