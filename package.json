@@ -3,24 +3,25 @@
   "version": "1.0.0",
   "description": "",
   "main": "src/main.js",
+  "engines": {
+    "node": ">=5.10.0"
+  },
   "dependencies": {
     "fn.js": "^0.8.1",
     "fuzzy-scheduler": "^1.0.0",
-    "hashmap": "^2.0.5",
     "is-video": "^1.0.1",
     "jsonfile": "^2.3.0",
     "kickass-torrent": "^0.0.3",
     "mkdir-parents": "0.0.2",
     "mode-to-permissions": "0.0.2",
     "moment": "^2.12.0",
-    "promise": "^7.1.1",
     "prompt": "^1.0.0",
     "transmission": "^0.4.5",
     "tvshowtime-api": "^1.2.0"
   },
   "devDependencies": {},
   "scripts": {
-    "postinstall": "node --harmony_destructuring scripts/configure.js"
+    "postinstall": "node --harmony_destructuring --harmony_rest_parameters scripts/configure.js"
   },
   "author": "",
   "license": "ISC"

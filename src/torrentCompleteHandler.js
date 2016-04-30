@@ -1,87 +1,97 @@
 'use strict'
-const http = require('http')
-const path = require('path')
+
+// Utils
 const isVideo = require('is-video')
-const Promise = require('promise')
-const fn = require('fn.js')
+const { curry, compose } = require('fn.js')
+const { map, filter, zeroPad, logger, denodeify } = require('./utils.js')
+const log = logger("[TORRENT COMPLETE]")
 
-const filter = fn.curry(fn.filter)
+// PATH
+const path = require('path')
+const pbaseName = curry(path.basename)
+
+// FS
 const fs = require('fs')
-const link = Promise.denodeify(fs.link)
-const readdir = Promise.denodeify(fs.readdir)
-const mkdirp = Promise.denodeify(require('mkdir-parents'))
+const exists = denodeify(fs.stat)
+const link = denodeify(fs.link)
+const readdir = denodeify(fs.readdir)
+const mkdirp = denodeify(require('mkdir-parents'))
 
+// Configs
 const config = require('./config')
-const showsFolder = config.getPath('torrent-dest-folder')
+const SHOWS_FOLDER = config.getPath('torrent-dest-folder')
 const PORT = config.getNum('torrent-automator-http-port')
 
-function log(...args) {
-  fn.apply(console.log, ["[TORRENT COMPLETE]"].concat(args))
+// TVShowTime
+const TVSTAPI = require('tvshowtime-api')
+const tvst = new TVSTAPI(config.get('tvshowtime-api-token'))
+const getTVShowTimeEpisode = filename => new Promise((resolve, reject) =>
+  tvst.getEpisode({filename}, res => res.episode ? resolve(res.episode) : reject(res))
+)
+
+const pjoin = a => b => path.join(a, b)
+function findVideos(filePath) {
+  if (isVideo(filePath))
+    return Promise.resolve([filePath])
+  return readdir(filePath)
+    .then(compose(filter(isVideo), map(pjoin(filePath))))
 }
 
-function prepareSrcPath(srcDir, srcName) {
-  const findVideos = file => {
-    if (!isVideo(file)) {
-      return readdir(file)
-        .then(filter(isVideo))
-        .then(videos => videos.map(video => path.join(file, video)))
-    }
-    return Promise.resolve([path.join(srcDir, file)])
-  }
-  return findVideos(path.join(srcDir, srcName))
-    .then(videos => {
-      if (!videos || videos.length < 1)
-        throw new Error("No video found in torrent '" + srcName + "'")
-      if (videos.length > 1) {
-        log("Too many video files in torrent '" + srcName + "'.\n" +
-          "  Taking the first one '" + videos[0] + "'")
-      }
-      return videos[0]
-    })
-}
-
-function prepareDestFolder(episode) {
-  const showFolder = path.join(showsFolder, episode.show.name.replace(/'/g, ""))
+function getEpisodeDestPath(episode, videoExt) {
+  const showFolder = path.join(SHOWS_FOLDER, episode.show.name.replace(/'/g, ""))
   const seasonFolder = path.join(showFolder, "Season " + episode.season_number)
-  const result = Promise.resolve(seasonFolder)
 
-  if (!fs.existsSync(seasonFolder)) {
-    log("Creating directory '" + seasonFolder + "'")
-    return mkdirp(seasonFolder).then(() => result)
-  }
-  return result
+  const fileBaseName = [
+    // Show name
+    episode.show.name.trim(),
+    // Season & Episode number
+    "S" + zeroPad(episode.season_number) + "E" + zeroPad(episode.number),
+    // Episode title
+    episode.name.trim()
+  ].join(".").replace(/'/g, "").replace(/\s+/g, ".")
+
+  return exists(seasonFolder)
+    .catch(() => {
+      log("Creating directory '" + seasonFolder + "'")
+      return mkdirp(seasonFolder)
+    })
+    .then(() => path.join(seasonFolder, fileBaseName + videoExt))
 }
 
-module.exports = torrentRepository => {
+function onTorrentComplete([hash, srcDir, srcName]) {
+  log("Torrent '" + srcName + "' completed")
 
-  function onTorrentComplete([hash, srcDir, srcName]) {
-    log("Torrent '" + srcName + "' completed")
-    const episode = torrentRepository.get(hash.toUpperCase())
-    if (episode) {
-      Promise.all([prepareSrcPath(srcDir, srcName), prepareDestFolder(episode)])
-        .then(([srcPath, destFolder]) => {
-          const destFile = episode.fileBaseName + path.extname(srcPath)
-          const destPath = path.join(destFolder, destFile)
-
-          episode.file = destPath
+  const filePath = path.join(srcDir, srcName)
+  findVideos(filePath)
+    .then(compose(Promise.all, map(srcPath =>
+      getTVShowTimeEpisode(path.basename(srcPath))
+      //.catch(() => getTVShowTimeEpisode(srcName))
+      .then(episode =>
+        getEpisodeDestPath(episode, path.extname(srcPath))
+        .then(destPath => {
           log("Moving '" + srcPath + "' to '" + destPath + "'")
           return link(srcPath, destPath)
         })
-        .catch(console.error)
-    }
-  }
+      )
+      .catch(console.error)
+    )))
+    .catch(console.error)
+}
 
+// Exports
+module.exports = () => {
   /*
    * Listen for HTTP request signaling torrent completion
    */
+  const http = require('http')
   http.createServer((req, res) => {
-      var data = ""
-      req.on('data', chunk => data += chunk.toString())
-      req.on('end', () => {
-        const parse = data.split("::")
-        if (parse.length == 3)
-          onTorrentComplete(parse)
-        res.end()
-      })
-    }).listen(PORT)
+    var data = ""
+    req.on('data', chunk => data += chunk.toString())
+    req.on('end', () => {
+      const parse = data.split("::")
+      if (parse.length == 3)
+        onTorrentComplete(parse)
+      res.end()
+    })
+  }).listen(PORT)
 }

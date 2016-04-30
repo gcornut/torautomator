@@ -1,14 +1,14 @@
 'use strict'
 
 const path = require('path')
-const Promise = require('promise')
 const fn = require('fn.js')
+const { denodeify } = require('../src/utils')
 
 const p = require('prompt')
 p.start()
 p.message = p.delimiter = ""
 
-const prompt = Promise.denodeify(p.get)
+const prompt = denodeify(p.get)
 
 const No = {}
 const yesNoPrompt = (message, def) =>
@@ -24,7 +24,7 @@ const catchNo = e => {
   if (e !== No) throw e
 }
 
-const fileStat = Promise.denodeify(require('fs').stat)
+const fileStat = denodeify(require('fs').stat)
 const fileCheckPermission = file =>
   fileStat(file).then(stats => {
     const mode = require('mode-to-permissions')(stats)
@@ -35,22 +35,13 @@ const fileCheckPermission = file =>
     }
   })
 
-const readJSON = Promise.denodeify(require('jsonfile').readFile)
-const writeJSON = Promise.denodeify(require('jsonfile').writeFile)
+const readJSON = denodeify(require('jsonfile').readFile)
+const writeJSON = denodeify(require('jsonfile').writeFile)
 
 const transmissionSettings = '/etc/transmission-daemon/settings.json'
 const postDownloadScript = __dirname + '/post-download.sh'
 const configFile = path.resolve(__dirname + '/../config.json')
 const configSampleFile = configFile + '.sample'
-
-const trace = x => {
-  console.log(x)
-  return x
-}
-const tracee = x => {
-  console.error(x)
-  throw x
-}
 
 function changeConfigurationFile(override) {
   return () =>

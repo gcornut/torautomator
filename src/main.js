@@ -3,8 +3,5 @@
  */
 'use strict'
 
-const HashMap = require('hashmap')
-const torrentRepository = new HashMap()
-
-require('./torrentLauncher')(torrentRepository)
-require('./torrentCompleteHandler')(torrentRepository)
+require('./torrentLauncher')()
+require('./torrentCompleteHandler')()

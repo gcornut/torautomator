@@ -16,3 +16,8 @@
 ## Run with PM2
 
     $ pm2 start pm2.yml
+
+# TODO
+
+- [ ] Download subtitles if they aren't already present in torrent folder
+- [ ] Post-complete actions (like Kodi media library indexing)  
