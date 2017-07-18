@@ -16,12 +16,13 @@
     "mode-to-permissions": "0.0.2",
     "moment": "^2.12.0",
     "prompt": "^1.0.0",
+    "thepiratebay": "^1.4.5",
     "transmission": "^0.4.5",
     "tvshowtime-api": "^1.2.0"
   },
   "devDependencies": {},
   "scripts": {
-    "postinstall": "node --harmony_destructuring --harmony_rest_parameters scripts/configure.js"
+    "postinstall": "node scripts/configure.js"
   },
   "author": "",
   "license": "ISC"

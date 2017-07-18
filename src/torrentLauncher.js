@@ -17,8 +17,9 @@ const transmission = new Transmission({
 const getTransmissionTorrents = denodeify(transmission.get.bind(transmission))
 const addTransmissionTorrent = denodeify(transmission.addUrl.bind(transmission))
 
-// KickAssTorrent
-const kickassSearch = denodeify(require('kickass-torrent'))
+// TPB
+process.env.THEPIRATEBAY_DEFAULT_ENDPOINT = config.get('tpb-endpoint')
+const PirateBay = require('thepiratebay')
 
 //TVShowTime
 const TVSTAPI = require('tvshowtime-api')
@@ -51,17 +52,25 @@ function searchTorrentInTransmission(showName, num) {
     })
 }
 
-function searchTorrentInKickAss(showName, num) {
+function hashFromMagnet(magnetLink) {
+  var m = null
+  if ((m = magnetLink.match(/urn:btih:([^&]+)/))) {
+    return m[1].toLowerCase()
+  }
+}
+
+function searchTorrentInPirateBay(showName, num) {
   const searchTitle = showName + " " + num
   log("Searching " + searchTitle)
-  return kickassSearch({q: searchTitle})
-    .then(prop('list'))
-    .then(findBy('title', torrentNameMatches(showName, num)))
+  return PirateBay.search(searchTitle, {
+   category: 205,
+   filter: {verified: true}
+  }).then(findBy('name', torrentNameMatches(showName, num)))
     .then(torrent => {
       if(!torrent)
         throw new NoTorrentFoundError("No suitable torrent found for " + searchTitle)
-      log("Found KickAss torrent '" + torrent.title + "'")
-      return torrent.hash
+      log("Found PirateBay torrent '" + torrent.name + "'")
+      return hashFromMagnet(torrent.magnetLink)
     })
 }
 
@@ -79,7 +88,7 @@ module.exports = () => {
   const moment = require('moment')
 
   function searchLaunchTorrent(episode, showName, num) {
-    return searchTorrentInKickAss(showName, num)
+    return searchTorrentInPirateBay(showName, num)
       .then(launchTorrent)
       //.then(torrentHash => torrentRepository.set(torrentHash.toUpperCase(), episode))
       .catch(console.error)
@@ -95,13 +104,15 @@ module.exports = () => {
           searchTorrentInTransmission(showName, num)
             .catch(catchOnly(NoTorrentFoundError, null))
             .then(() => {
-              // Torrent not found in transmission, search in KickAssTorrent (delayed)
+              // Torrent not found in transmission, search in Pirate bay (delayed)
               log("New episode "+ showName + " " + num + " will be searched in about 1 to 2h")
+              searchLaunchTorrent(episode, showName, num)
+ 	      /*
               scheduler.do(() => searchLaunchTorrent(episode, showName, num))
                 .between(
                   moment().add(1, 'h'),
                   moment().add(1, 'h').add(50, 'm')
-                ).done()
+                ).done()*/
             })
             .catch(console.error)
         })
