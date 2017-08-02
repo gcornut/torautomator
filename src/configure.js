@@ -1,8 +1,7 @@
 'use strict'
 
 const path = require('path')
-const fn = require('fn.js')
-const { denodeify } = require('../src/utils')
+const { denodeify } = require('./fn')
 
 const p = require('prompt')
 p.start()
@@ -39,7 +38,7 @@ const readJSON = denodeify(require('jsonfile').readFile)
 const writeJSON = denodeify(require('jsonfile').writeFile)
 
 const transmissionSettings = '/etc/transmission-daemon/settings.json'
-const postDownloadScript = __dirname + '/post-download.sh'
+const postDownloadScript = path.resolve(__dirname + '/torrentComplete.js')
 const configFile = path.resolve(__dirname + '/../config.json')
 const configSampleFile = configFile + '.sample'
 
@@ -95,9 +94,9 @@ function updateTransmissionConfiguration() {
       if (!permissions.canRead || !permissions.canWrite) {
         throw new Error(
           "You don't have permission to modify the '" + transmissionSettings + "' file.\n" +
-          "You should stop the transmission daemon if it is running and temporaly change the permissions:\n " +
+          "You should stop the transmission daemon if it is running and temporaly change the permissions:\n" +
           "$ sudo service transmission-daemon stop\n" +
-          "$ sudo chmod o+wr " + transmissionSettings + "")
+          "$ sudo chmod o+wr " + transmissionSettings)
       }
 
       // check the post-download.sh script exists

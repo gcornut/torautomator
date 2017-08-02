@@ -3,7 +3,5 @@
   "transmission-daemon-host": "localhost",
   "transmission-daemon-port": 9091,
   "torrent-dest-folder": "~/TV Shows/",
-  "torrent-automator-http-host": "localhost",
-  "torrent-automator-http-port": 8888,
   "tpb-endpoint": ""
 }
