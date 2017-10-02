@@ -24,18 +24,26 @@ function findVideos(filePath) {
     .then(fn.compose(fn.filter(isVideo), fn.map(pjoin(filePath))))
 }
 
+function sanitize(string) {
+    return string.trim().replace(/[^0-9A-Za-z\-_ ]/g, "")
+}
+
 function getEpisodeDestPath(episode, videoExt) {
-  const showFolder = path.join(SHOWS_FOLDER, episode.show.name.replace(/'/g, ""))
-  const seasonFolder = path.join(showFolder, "Season " + episode.season_number)
+  const showName = sanitize(episode.show.name)
+  const seasonNumber = fn.zeroPad(episode.season_number)
+  const episodeName = sanitize(episode.name)
+  const episodeNumber = fn.zeroPad(episode.number)
+  const showFolder = path.join(SHOWS_FOLDER, showName)
+  const seasonFolder = path.join(showFolder, "Season " + seasonNumber)
 
   const fileBaseName = [
     // Show name
-    episode.show.name.trim(),
+    showName,
     // Season & Episode number
-    "S" + fn.zeroPad(episode.season_number) + "E" + fn.zeroPad(episode.number),
+    "S" + seasonNumber + "E" + episodeNumber,
     // Episode title
-    episode.name.trim()
-  ].join(".").replace(/'/g, "").replace(/\s+/g, ".")
+    episodeName
+  ].join(".").replace(/\s+/g, ".").replace(/\.+/g, ".")
 
   return io.fs.exists(seasonFolder)
     .catch(() => {
@@ -52,16 +60,17 @@ function onTorrentComplete(filePath) {
   findVideos(filePath)
     .then(fn.compose(Promise.all, fn.map(srcPath =>
       io.TVShowTime.getEpisode(path.basename(srcPath))
+      .then(fn.prop('episode'))
       .then(episode =>
         getEpisodeDestPath(episode, path.extname(srcPath))
         .then(destPath => {
-          log("Moving '" + srcPath + "' to '" + destPath + "'")
-          return io.fs.link(srcPath, destPath)
+          log("Copying '" + srcPath + "' to '" + destPath + "'")
+          return io.fs.copy(srcPath, destPath)
         })
       )
-      .catch(console.error)
+      .catch(log)
     )))
-    .catch(console.error)
+    .catch(log)
 }
 if (process.env.TR_TORRENT_DIR && process.env.TR_TORRENT_NAME) {
   onTorrentComplete(path.join(process.env.TR_TORRENT_DIR, process.env.TR_TORRENT_NAME))

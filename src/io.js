@@ -23,6 +23,14 @@ const nodeFs = require('fs')
 const fs = {
   exists: fn.denodeify(nodeFs.stat),
   link: fn.denodeify(nodeFs.link),
+  copy: (src, dest) => new Promise((resolve, reject) => {
+    let rd = nodeFs.createReadStream(src)
+    rd.on("error", reject)
+    let wr = nodeFs.createWriteStream(dest)
+    wr.on("error", reject)
+    wr.on("close", () => resolve())
+    rd.pipe(wr)
+  }),
   readdir: fn.denodeify(nodeFs.readdir),
   appendFile: fn.denodeify(nodeFs.appendFile),
   mkdirp: fn.denodeify(require('mkdir-parents')),
@@ -57,12 +65,10 @@ module.exports = {
   PirateBay,
 
   TVShowTime: {
-    getToWatch: () => new Promise((resolve, _) =>
-      tvst.getToWatch({page: 0, limit: 100}, resolve)
-    ),
-    getEpisode: filename => new Promise((resolve, reject) =>
-      tvst.getEpisode({filename}, res => res.episode ? resolve(res.episode) : reject(res))
-    )
+    getToWatch: () => fn.denodeify(tvst.getToWatch)({page: 0, limit: 100}),
+    getLibrary: () => fn.denodeify(tvst.getLibrary)({page: 0, limit: 100}),
+    getEpisode: (filename) => fn.denodeify(tvst.getEpisode)({filename}),
+    getShow: (show_id) => fn.denodeify(tvst.getShow)({show_id, include_episodes: true})
   },
 
   Logger: {
