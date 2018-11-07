@@ -1,9 +1,10 @@
-#!/usr/bin/node
+#!/usr/bin/env node
 'use strict'
 
 // Utils
 const isVideo = require('is-video')
 const fn = require('./fn')
+const async = require('./async')
 
 // PATH
 const path = require('path')
@@ -16,55 +17,91 @@ const SHOWS_FOLDER = config.getPath('torrent-dest-folder')
 const io = require('./io')
 const log = io.Logger.create(__filename)
 
-const pjoin = a => b => path.join(a, b)
-function findVideos(filePath) {
-  if (isVideo(filePath))
-    return Promise.resolve([filePath])
-  return io.fs.readdir(filePath)
-    .then(fn.compose(fn.filter(isVideo), fn.map(pjoin(filePath))))
+const sanitizeFileName = require('sanitize-filename')
+function sanitize(input) {
+  return sanitizeFileName(input.trim()).replace(/('|:)/g, '')
 }
 
-function getEpisodeDestPath(episode, videoExt) {
-  const showFolder = path.join(SHOWS_FOLDER, episode.show.name.replace(/'/g, ""))
-  const seasonFolder = path.join(showFolder, "Season " + episode.season_number)
+async function getEpisodeDestPath({episode, srcPath}) {
+  const showFolder = path.join(SHOWS_FOLDER, sanitize(episode.show.name))
+  const seasonFolder = path.join(showFolder, `Season ${episode.season_number}`)
+  if (! await io.fs.exists(seasonFolder)) {
+    log("Creating directory '" + seasonFolder + "'")
+    await io.fs.mkdirp(seasonFolder)
+  }
 
-  const fileBaseName = [
-    // Show name
-    episode.show.name.trim(),
-    // Season & Episode number
-    "S" + fn.zeroPad(episode.season_number) + "E" + fn.zeroPad(episode.number),
-    // Episode title
-    episode.name.trim()
-  ].join(".").replace(/'/g, "").replace(/\s+/g, ".")
+  let showName = sanitize(episode.show.name).replace(' ', '.')
+  let season = fn.zeroPad(episode.season_number)
+  let episodeNumber = fn.zeroPad(episode.number)
+  let episodeName = sanitize(episode.name).replace(' ', '.')
 
-  return io.fs.exists(seasonFolder)
-    .catch(() => {
-      log("Creating directory '" + seasonFolder + "'")
-      return io.fs.mkdirp(seasonFolder)
-    })
-    .then(() => path.join(seasonFolder, fileBaseName + videoExt))
+  let fileExt = path.extname(srcPath)
+  let fileName = `${showName}.S${season}E${episodeNumber}.${episodeName}`
+  return path.join(seasonFolder, fileName + fileExt)
 }
 
-function onTorrentComplete(filePath) {
-  if (!filePath) return
-  log("Torrent '" + filePath + "' completed")
+function getSubTitlePath(videoFile) {
+  return videoFile.replace(/\.\w+$/, ".srt")
+}
 
-  findVideos(filePath)
-    .then(fn.compose(Promise.all, fn.map(srcPath =>
-      io.TVShowTime.getEpisode(path.basename(srcPath))
-      .then(episode =>
-        getEpisodeDestPath(episode, path.extname(srcPath))
-        .then(destPath => {
-          log("Moving '" + srcPath + "' to '" + destPath + "'")
-          return io.fs.link(srcPath, destPath)
-        })
-      )
-      .catch(console.error)
-    )))
-    .catch(console.error)
+async function main() {
+  let paths
+  if (process.env.TR_TORRENT_DIR && process.env.TR_TORRENT_NAME) {
+    paths = [path.join(process.env.TR_TORRENT_DIR, process.env.TR_TORRENT_NAME)]
+  } else {
+    paths = process.argv.splice(2)
+  }
+
+  let processing = fn.pipe(
+    async.trace('Torrent completed:'),
+    // List all files in path (recursively)
+    async.mapcat(io.fs.listFiles),
+    // Select video files
+    async.filter(isVideo),
+
+    // Search episode corresponding to video file name
+    async.map(async srcPath => {
+      return {srcPath,
+              episode: await io.TVShowTime.getEpisode(path.basename(srcPath))}
+    }),
+
+    // Filter out videos that are not episodes
+    async.filter(e => e.episode),
+
+    // Get destination path for videos
+    async.map(async e => {
+      return {...e, destPath: await getEpisodeDestPath(e)}
+    }),
+
+    async.partition(5),
+    async.map(async batch => await async.consume(batch)),
+    // Filter out videos already existing with the same hash
+    async.mapcat(async.filterEager(async ({srcPath, destPath}) => {
+      return !await io.fs.exists(destPath) ||
+             !await io.md5Compare(srcPath, destPath)
+    })),
+
+    async.partition(3),
+    async.map(async batch => await async.consume(batch)),
+    // Copy video to destination (with sub titles if needed)
+    async.mapcat(
+      async.mapEager(async e => {
+        let {srcPath, destPath} = e
+        log(`Moving '${srcPath}' to '${destPath}'`)
+        let copyingVideo = io.fs.copyFile(srcPath, destPath)
+
+        let srcSRT = getSubTitlePath(srcPath)
+        if (await io.fs.exists(srcSRT)) {
+          let destSRT = getSubTitlePath(destPath)
+          log(`Moving '${srcSRT}' to '${destSRT}'`)
+          await io.fs.copyFile(srcSRT, destSRT)
+        }
+
+        await copyingVideo
+        return e
+      })
+    )
+  )
+  console.log("ok", await consume(processing(paths)))
 }
-if (process.env.TR_TORRENT_DIR && process.env.TR_TORRENT_NAME) {
-  onTorrentComplete(path.join(process.env.TR_TORRENT_DIR, process.env.TR_TORRENT_NAME))
-} else {
-  onTorrentComplete(process.argv[2])
-}
+main().catch(console.trace).then(console.log)

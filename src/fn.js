@@ -23,10 +23,17 @@ module.exports = fn.merge(fn, {
     else throw error
   }),
 
-  denodeify: fun => (...args) => new Promise((resolve, reject) => {
-    fn.apply(fun, args.concat([(err, res) => {
+  denodeify: (fun) => (...args) => new Promise((resolve, reject) => {
+    fun(...args, (err, res) => {
       if (err) reject(err)
       else resolve(res)
-    }]))
+    })
+  }),
+
+  denodeify2: (fun) => (...args) => new Promise((resolve, reject) => {
+    fun(...args, (err, res) => {
+      if (err) resolve([err, null])
+      else resolve([null, res])
+    })
   })
 })
