@@ -3,10 +3,11 @@
 const fn = require('ramda')
 
 const trace = e => {console.log(e); return e;}
+const mtrace = m => e => {console.log(m, e); return e;}
 
 // Extend Ramda with custom functions
 module.exports = fn.merge(fn, {
-  trace,
+  trace, mtrace,
 
   findBy: fn.curry((property, predicate, collection) =>
     collection.find(fn.compose(predicate, fn.prop(property)))

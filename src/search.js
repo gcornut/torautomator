@@ -4,9 +4,7 @@ const io = require('./io')
 
 const torrentNameMatches = fn.curry((showName, num, torrentName) =>
     showName
-        .replace(/'(\w+)?/g, "") // remove apostrophes
-        .replace(/\(/g, "") // remove parentheses
-        .replace(/\)/g, "") // remove parentheses
+        .replace(/[^a-zA-Z0-9\- ]/g, '') // remove non ascii except spaces
         .split(" ")
         .concat([num])
         .every(fn.containsIgnoreCase(torrentName))
@@ -39,8 +37,9 @@ function hashFromMagnet(magnetLink) {
 
 function searchPirateBay(showName, num) {
   const searchTitle = showName + " " + num
-  const throwNotFound = () =>
-    new NoTorrentFoundError("No suitable torrent found for " + searchTitle)
+  const throwNotFound = () => {
+    throw new NoTorrentFoundError("No suitable torrent found for " + searchTitle)
+  }
   return io.PirateBay.search(searchTitle, {
     filter: {verified: true}
   }).then(fn.findBy('name', torrentNameMatches(showName, num)))

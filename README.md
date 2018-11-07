@@ -15,6 +15,5 @@
 # TODO
 
 - [ ] Check episiode exists in tv show folder before checking transmission
-- [ ] Schedule torrent search according to the air date of episodes (whith margin)
 - [ ] Download subtitles if they aren't already present in torrent folder
 - [ ] Post-complete actions (like Kodi media library indexing)  

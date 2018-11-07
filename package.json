@@ -20,7 +20,7 @@
     "sanitize-filename": "^1.6.1",
     "thepiratebay": "^1.4.5",
     "transmission": "^0.4.5",
-    "tvshowtime-api": "^1.2.0"
+    "tvshowtime-api": "git+https://github.com/gcornut/tvshowtime-api.git"
   },
   "devDependencies": {
     "chai": "^4.1.0",

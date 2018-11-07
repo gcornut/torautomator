@@ -158,7 +158,9 @@ module.exports = {
           else resolve(null)
         })
       })
-    }
+    },
+    getLibrary: () => fn.denodeify(tvst.getLibrary)({page: 0, limit: 100}),
+    getShow: (show_id) => fn.denodeify(tvst.getShow)({show_id, include_episodes: true})
   },
 
   Logger: {
